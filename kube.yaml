@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: reader-pv-volume
+spec:
+  accessModes:
+  - ReadOnlyMany
+  capacity:
+    storage: 100M
+  hostPath:
+    path: ./images
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: target-dir-pv
+spec:
+  accessModes:
+  - ReadOnlyMany
+  capacity:
+    storage: 100M
+  hostPath:
+    path: /tmp/test
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: reader-pv-claim
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100M
+  volumeName: reader-pv-volume
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sorter-pv-claim
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100M
+  volumeName: target-dir-pv
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reader
+spec:
+  containers:
+  - command:
+    - reader
+    image: localhost/color_grouper
+    imagePullPolicy: Never
+    name: reader
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128M
+    volumeMounts:
+    - mountPath: /image_folder/
+      name: reader-volume
+      readOnly: true
+  volumes:
+  - name: reader-volume
+    persistentVolumeClaim:
+      claimName: reader-pv-claim
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: generator
+spec:
+  containers:
+  - command:
+    - generator
+    image: localhost/color_grouper
+    imagePullPolicy: Never
+    name: generator
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128M
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sorter
+spec:
+  containers:
+  - command:
+    - sorter
+    image: localhost/color_grouper
+    imagePullPolicy: Never
+    name: sorter
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128M
+    volumeMounts:
+    - mountPath: /output_folder/
+      name: target-dir
+  volumes:
+  - name: target-dir
+    persistentVolumeClaim:
+      claimName: sorter-pv-claim

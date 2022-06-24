@@ -1,0 +1,100 @@
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: reader-pv-volume
+  spec:
+    accessModes:
+    - ReadOnlyMany
+    capacity:
+      storage: 100M
+    hostPath:
+      path: ./images
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: target-dir-pv
+  spec:
+    accessModes:
+    - ReadOnlyMany
+    capacity:
+      storage: 100M
+    hostPath:
+      path: /tmp/test
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: reader-pv-claim
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 100M
+    volumeName: reader-pv-volume
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: sorter-pv-claim
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 100M
+    volumeName: target-dir-pv
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: reader
+  spec:
+    containers:
+    - command:
+      - reader
+      image: color-grouper-image
+      name: reader
+      resources:
+        cpu: 500m
+        memory: 128Mi
+      volume_mounts:
+      - mount_path: /image_folder/
+        name: reader-volume
+        read_only: true
+    volumes:
+    - name: reader-volume
+      persistentVolumeClaim:
+        claimName: reader-pv-claim
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: generator
+  spec:
+    containers:
+    - command:
+      - generator
+      image: color-grouper-image
+      name: generator
+      resources:
+        cpu: 500m
+        memory: 128Mi
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: sorter
+  spec:
+    containers:
+    - command:
+      - sorter
+      image: color-grouper-image
+      name: sorter
+      resources:
+        cpu: 500m
+        memory: 128Mi
+      volume_mounts:
+      - mount_path: /output_folder/
+        name: target-dir
+        read_only: true
+    volumes:
+    - name: target-dir
+      persistentVolumeClaim:
+        claimName: sorter-pv-claim
+

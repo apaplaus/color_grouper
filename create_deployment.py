@@ -1,5 +1,5 @@
 import configparser
-import json
+import yaml
 
 from kubernetes import client
 
@@ -47,28 +47,29 @@ from kubernetes import client
 #         )
 #     )
 
-def create_pod(name):
+def create_pod(name, image):
     return client.V1Pod(
         api_version = "v1",
         kind = "Pod",
-        metadata = client.V1ObjectMeta(
-            name = name,
-        ),
-        spec = client.V1PodSpec(
-            containers = [
-                client.V1Container(
-                    name = name,
-                    image = "color-grouper-image",
-                    resources = client.V1ResourceRequirements(
-                        {
-                            "memory": "128Mi",
+        metadata = {
+            "name": name,
+        },
+        spec = {
+            "containers" : [
+                {
+                    "name" : name,
+                    "image" : image,
+                    "imagePullPolicy": "Never",
+                    "resources" : {
+                        "limits": {
+                            "memory": "128M",
                             "cpu": "500m"
                         }
-                    ),
-                    command = [name],                    
-                )
+                    },
+                    "command" : [name],                    
+                }
             ],
-        )
+        }
     )
 
 
@@ -78,11 +79,12 @@ def main():
         config.read_file(cfg)
     input_dir = config.get("reader", "image_folder")
     target_dir = config.get("sorter", "target_dir")
+    image_name = config.get("main", "docker_image_name")
     pods = []
     pvolumes = []
     pv_claims = []
     for app in ["reader", "generator", "sorter"]:
-        pod = create_pod(app)
+        pod = create_pod(app, image_name)
         # mount volumes for some containers
         if app == "reader":
             pv = client.V1PersistentVolume(
@@ -110,7 +112,7 @@ def main():
                 )
             pvolumes.append(pv)
             pv_claims.append(pv_claim)
-            pod.spec.volumes = [
+            pod.spec["volumes"] = [
                 client.V1Volume(
                     name = "reader-volume",
                     persistent_volume_claim = 
@@ -120,12 +122,12 @@ def main():
                     
                 )
             ]
-            pod.spec.containers[0].volume_mounts = [
-                client.V1VolumeMount(
-                    name = "reader-volume",
-                    read_only = True,
-                    mount_path = "/image_folder/"
-                )
+            pod.spec["containers"][0]["volumeMounts"] = [
+                {
+                    "name" : "reader-volume",
+                    "readOnly" : True,
+                    "mountPath" : "/image_folder/"
+                }
             ]
         elif app == "sorter":
             pv = client.V1PersistentVolume(
@@ -153,7 +155,7 @@ def main():
                 )
             pvolumes.append(pv)
             pv_claims.append(pv_claim)
-            pod.spec.volumes = [
+            pod.spec["volumes"] = [
                 client.V1Volume(
                     name = "target-dir",
                     persistent_volume_claim = 
@@ -162,21 +164,20 @@ def main():
                         ) 
                 )
             ]
-            pod.spec.containers[0].volume_mounts = [
-                client.V1VolumeMount(
-                    name = "target-dir",
-                    read_only = True,
-                    mount_path = "/output_folder/"
-            )]
+            pod.spec["containers"][0]["volumeMounts"] = [
+                {
+                    "name" : "target-dir",
+                    "mountPath" : "/output_folder/"
+                }
+            ]
         pods.append(pod)
 
-    with open("./kube.yml", "w") as file:
-        for pv in pvolumes:
-            print(json.dumps(client.ApiClient().sanitize_for_serialization(pv)), file=file)
-        for pv_claim in pv_claims:
-            print(json.dumps(client.ApiClient().sanitize_for_serialization(pv_claim)), file=file)
-        for pod in pods:
-            print(json.dumps(client.ApiClient().sanitize_for_serialization(pod)), file=file)
+    with open("./kube.yaml", "w") as file:
+        yaml.dump_all(client.ApiClient().sanitize_for_serialization(pvolumes + pv_claims + pods), stream=file)
+        # print(yaml.dump(client.ApiClient().sanitize_for_serialization(pvolumes + pv_claims + pods)), file=file)
+        # print(json.dumps(client.ApiClient().sanitize_for_serialization(pvolumes + pv_claims + pods)), file=file)
+        # print(json.dumps(client.ApiClient().sanitize_for_serialization(pv_claims)), file=file)
+        # print(json.dumps(client.ApiClient().sanitize_for_serialization(pods)), file=file)
 
 if __name__ == '__main__':
     main()
